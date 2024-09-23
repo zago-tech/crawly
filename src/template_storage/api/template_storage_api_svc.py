@@ -1,7 +1,7 @@
 import json
 import sys
 from typing import Dict, List
-from fastapi import APIRouter, Request, Response, HTTPException
+from fastapi import APIRouter, Response
 
 sys.path.append(".")
 from src.common.models.template import TemplateCreate, TemplateRead
@@ -28,7 +28,7 @@ class TemplateStorageAPI(APISvc):
 
     async def read(self, template_id: str) -> dict:
         return await super().read(payload=template_id)
-    
+
     async def read_all(self) -> dict:
         body = {
             "action": self._outgoing_commands["read_all"],

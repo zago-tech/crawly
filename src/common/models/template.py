@@ -78,7 +78,7 @@ class TemplateFieldCostraintsOptional(RootModel):
                     Field(discriminator='data_type')]] = Field(default=None)
 
 class TemplateFieldSelectors(BaseModel):
-    xpath: str = Field(title="Поле для серектора xpath")
+    xpath: str = Field(title="Поле для селектора xpath")
 
 class TemplateFieldSelectorsOptional(BaseModel):
     xpath: Optional[str] = Field(default=None)
@@ -115,10 +115,14 @@ class TemplatePagination(BaseModel):
 class TemplatePaginationOptional(BaseModel):
     pagination_type: Optional[Literal['link']] = None
     pagination_link: Optional[str] = None
-    
+
+class Template(RootModel):
+    root: Dict[str, Dict[str, TemplateFieldInDB]]
+
 class TemplateInDB(BaseModel):
-    template: Dict[str, Dict[str, TemplateFieldInDB]]
-    
+    template: Template
+    name: str
+
     @model_validator(mode='before')
     def remove_pag_field(cls, data):
         inner_data = data.get('template')
@@ -133,4 +137,3 @@ class TemplateCreate(TemplateInDB):
 
 class TemplateRead(RootModel):
     root: Dict[str, Dict[str, TemplateFieldForSchema]]
-    
