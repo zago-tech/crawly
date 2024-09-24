@@ -1,11 +1,4 @@
-import asyncio
-import json
 import sys
-from typing import MutableMapping, Optional
-from uuid import uuid4
-import aio_pika
-from fastapi import APIRouter
-
 
 sys.path.append(".")
 from src.common.app_svc import AppSvc
@@ -30,7 +23,7 @@ class TemplateStorageApp(AppSvc):
     def __init__(self, settings: TemplateStorageAppSettings, *args, **kwargs):
         super().__init__(settings, *args, **kwargs)
         self.psql_connection_pool = PSQLConnectionPool()
-    
+
     def _set_incoming_commands(self) -> dict:
         return {
             "template.create": self._create,
@@ -49,11 +42,12 @@ class TemplateStorageApp(AppSvc):
             template = template_manager.get(template_id=template_id)
             if template:
                 inner_template = template.get('template')
+                self._logger.error(inner_template)
                 processed_template = TemplateRead.model_validate(inner_template)
                 return processed_template.model_dump()
             else:
                 return {"error": {"code": "404", "message": f"Template {template_id} not found"}}
-            
+
     @AppSvc.set_signals(before="template.read_all.start", after="template.read_all.end")
     async def _read_all(self, mes) -> dict:
         with self.psql_connection_pool.connect() as conn:
@@ -66,8 +60,8 @@ class TemplateStorageApp(AppSvc):
                     templates_processed_all.append({"id": template_id})
                 return templates_processed_all
             else:
-                return {"error": {"code": "404", "message": f"No templates found"}}
-    
+                return {"error": {"code": "404", "message": "No templates found"}}
+
     @AppSvc.set_signals(before="template.read_schemas.start", after="template.read_schemas.end")
     async def _read_schemas(self, mes) -> dict:
         template_id = mes.get('data')
@@ -81,22 +75,24 @@ class TemplateStorageApp(AppSvc):
                     template_schemas_processed.append({"id": schema_id})
                 return template_schemas_processed
             else:
-                return {"error": {"code": "404", "message": f"No template schemas found"}}
+                return {"error": {"code": "404", "message": "No template schemas found"}}
 
+    @AppSvc.set_signals(before="template.create.start", after="template.create.end", path_to_obj_id="data.template")
     async def _create(self, mes) -> dict:
-        template = mes.get('data')
+        template_info = mes.get('data')
         try:
-            template_valid = TemplateInDB.model_validate(template)
-        except BaseException as e:
-            return {"error"}
+            template_info_valid = TemplateInDB.model_validate(template_info)
+        except BaseException:
+            return {"error": {"code": "422", "message": "Unprocessable template entity"}}
         with self.psql_connection_pool.connect() as conn:
             template_manager = TemplateManager(logger=self._logger, psql_connection=conn)
-            template_uuid = template_manager.save(template=template_valid)
+            template_uuid = template_manager.save(template_info=template_info_valid)
             if template_uuid:
                 return {"id": template_uuid}
             else:
-                return {"error": "Insertion error"}
+                return {"error": {"code": "500", "message": "Insertion error"}}
 
+    @AppSvc.set_signals(before="template.delete.start", after="template.delete.end")
     async def _delete(self, mes) -> bool:
         template_uuid = mes.get('data')
         with self.psql_connection_pool.connect() as conn:
@@ -113,11 +109,12 @@ class TemplateStorageApp(AppSvc):
     async def on_startup(self) -> None:
         await super().on_startup()
         self.psql_connection_pool.create_pool()
-        
+
     async def on_shutdown(self) -> None:
         await super().on_shutdown()
         self.psql_connection_pool.close_pool()
-    
+
+
 settings = TemplateStorageAppSettings()
 
 app = TemplateStorageApp(settings=settings, title="`TemplateStorageApp` service")

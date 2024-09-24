@@ -1,7 +1,9 @@
+import json
 import sys
 from typing import Optional, Dict
 from uuid import uuid4, UUID
 from psycopg2.errors import UniqueViolation
+from psycopg2.extras import DictCursor
 
 sys.path.append('.')
 from src.common.logger import CrwlLogger
@@ -9,27 +11,28 @@ from src.common.models.template import TemplateInDB
 
 
 class TemplateManager():
-    
+
     def __init__(self,
                  logger: CrwlLogger,
                  psql_connection) -> None:
-        
-        self.psql_connection = psql_connection  
-        self._logger = logger  
-    
-    def save(self, template) -> Optional[Dict[str, UUID]]:
+
+        self.psql_connection = psql_connection
+        self._logger = logger
+
+    def save(self, template_info) -> Optional[Dict[str, UUID]]:
         with self.psql_connection.cursor() as cursor:
             sql = """
-                INSERT INTO templates (template) VALUES (%(template)s) RETURNING id
+                INSERT INTO templates (name, template) VALUES (%(name)s, %(template)s) RETURNING id
             """
-            try: 
-                cursor.execute(sql, {'template': template.model_dump_json()})
+            try:
+                cursor.execute(sql, {'name': template_info.name,
+                                     'template': template_info.template.model_dump_json()})
                 self.psql_connection.commit()
                 template_uuid = cursor.fetchone()[0]
                 return template_uuid
-            except UniqueViolation:
+            except UniqueViolation:  # TODO More error handling needed
                 return None
-            
+
     def delete(self, template_id: str) -> str:
         with self.psql_connection.cursor() as cursor:
             sql = """
@@ -45,13 +48,13 @@ class TemplateManager():
                 return None
     
     def get(self, template_id: str):
-        with self.psql_connection.cursor() as cursor:
+        with self.psql_connection.cursor(cursor_factory=DictCursor) as cursor:
             sql = """
-                SELECT template FROM templates WHERE id = %(template_id)s
+                SELECT template, name FROM templates WHERE id = %(template_id)s
             """
             try: 
                 cursor.execute(sql, {'template_id': template_id})
-                template = cursor.fetchone()[0]
+                template = cursor.fetchone()
                 return template
             except BaseException as e:
                 return None
